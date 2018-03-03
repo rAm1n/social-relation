@@ -24,6 +24,8 @@ model_names = sorted(name for name in models.__dict__
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('data', metavar='DIR',
 					help='path to dataset')
+parser.add_argument('--num-class', default=46, type=int, metavar='N',
+                    help='number of classes for last layer') 
 parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet18',
 					choices=model_names,
 					help='model architecture: ' +
@@ -37,7 +39,7 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
 					help='manual epoch number (useful on restarts)')
 parser.add_argument('-b', '--batch-size', default=256, type=int,
 					metavar='N', help='mini-batch size (default: 256)')
-parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
+parser.add_argument('--lr', '--learning-rate', default=1e-1, type=float,
 					metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
 					help='momentum')
@@ -97,6 +99,8 @@ def main():
 	optimizer = torch.optim.SGD(model.parameters(), args.lr,
 								momentum=args.momentum,
 								weight_decay=args.weight_decay)
+	#optimizer = torch.optim.Adam(model.parameters(), args.lr,
+	#							betas=(0.9, 0.999), eps=1e-08, weight_decay=args.weight_decay) 
 
 	# optionally resume from a checkpoint
 	if args.resume:
@@ -141,6 +145,8 @@ def main():
 				normalize,
 			]))
 
+	# adapting number of classes. 
+	model.fc = nn.Linear(512, len(train_dataset.classes), bias=True)
 
 	if args.distributed:
 		train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -155,6 +161,7 @@ def main():
 		FashionDataset(
 			args.data,
 			'val', transforms.Compose([
+			transforms.ToPILImage(),
 			transforms.Resize(256),
 			transforms.CenterCrop(224),
 			transforms.ToTensor(),

@@ -21,6 +21,8 @@ class FashionDataset(Dataset):
 		"""
 		self.root_dir = root_dir
 		self.transform = transform
+		self.class_to_idx = dict()
+		self.classes = list()
 		self.dataset = self._load_dataset(mode)
 
 
@@ -37,7 +39,10 @@ class FashionDataset(Dataset):
 			img, cls_idx = line.strip().split()
 			bbox = [int(pos) for pos in bbox_file.readline().strip().split()[1:]]
 			if mode_file.readline().strip().split()[1] == mode:
-				dataset.append((img, int(cls_idx), bbox))
+				if cls_idx not in self.class_to_idx:
+					self.class_to_idx[cls_idx] = len(self.class_to_idx)
+					self.classes.append(cls_idx)
+				dataset.append((img, self.class_to_idx[cls_idx], bbox))
 		return dataset
 
 
