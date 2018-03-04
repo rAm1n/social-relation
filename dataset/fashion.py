@@ -5,6 +5,7 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 from skimage import io, transform
+import random
 
 
 
@@ -43,6 +44,8 @@ class FashionDataset(Dataset):
 					self.class_to_idx[cls_idx] = len(self.class_to_idx)
 					self.classes.append(cls_idx)
 				dataset.append((img, self.class_to_idx[cls_idx], bbox))
+
+		random.shuffle(dataset)
 		return dataset
 
 
