@@ -15,6 +15,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 from dataset.fashion import FashionDataset
+import numpy as np
 
 
 model_names = sorted(name for name in models.__dict__
@@ -24,8 +25,8 @@ model_names = sorted(name for name in models.__dict__
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('data', metavar='DIR',
 					help='path to dataset')
-parser.add_argument('--num-class', default=46, type=int, metavar='N',
-                    help='number of classes for last layer') 
+#parser.add_argument('--num-class', default=46, type=int, metavar='N',
+#l                    help='number of classes for last layer') 
 parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet18',
 					choices=model_names,
 					help='model architecture: ' +
@@ -66,7 +67,7 @@ best_prec1 = 0
 
 
 def main():
-	global args, best_prec1
+	global args, best_prec1, model, train_dataset, val_loader
 	args = parser.parse_args()
 
 	args.distributed = args.world_size > 1
@@ -99,23 +100,10 @@ def main():
 	optimizer = torch.optim.SGD(model.parameters(), args.lr,
 								momentum=args.momentum,
 								weight_decay=args.weight_decay)
-	#optimizer = torch.optim.Adam(model.parameters(), args.lr,
-	#							betas=(0.9, 0.999), eps=1e-08, weight_decay=args.weight_decay) 
+#	optimizer = torch.optim.Adam(model.parameters(), args.lr,
+#								betas=(0.9, 0.999), eps=1e-08, weight_decay=args.weight_decay) 
 
 	# optionally resume from a checkpoint
-	if args.resume:
-		if os.path.isfile(args.resume):
-			print("=> loading checkpoint '{}'".format(args.resume))
-			checkpoint = torch.load(args.resume)
-			args.start_epoch = checkpoint['epoch']
-			best_prec1 = checkpoint['best_prec1']
-			model.load_state_dict(checkpoint['state_dict'])
-			optimizer.load_state_dict(checkpoint['optimizer'])
-			print("=> loaded checkpoint '{}' (epoch {})"
-				  .format(args.resume, checkpoint['epoch']))
-		else:
-			print("=> no checkpoint found at '{}'".format(args.resume))
-
 	cudnn.benchmark = True
 
 	# Data loading code
@@ -136,7 +124,7 @@ def main():
 	else:
 		train_dataset = FashionDataset(
 			args.data,
-			'train',
+			['train', 'val'],
 			transforms.Compose([
 				transforms.ToPILImage(),
 				transforms.Resize((256,256)),
@@ -146,7 +134,21 @@ def main():
 			]))
 
 	# adapting number of classes. 
-	model.fc = nn.Linear(512, len(train_dataset.classes), bias=True)
+	model.fc = nn.Linear(512, len(train_dataset.class_to_idx), bias=True)
+
+	if args.resume:
+		if os.path.isfile(args.resume):
+			print("=> loading checkpoint '{}'".format(args.resume))
+			checkpoint = torch.load(args.resume)
+			args.start_epoch = checkpoint['epoch']
+			best_prec1 = checkpoint['best_prec1']
+			model.load_state_dict(checkpoint['state_dict'])
+			optimizer.load_state_dict(checkpoint['optimizer'])
+			print("=> loaded checkpoint '{}' (epoch {})"
+				  .format(args.resume, checkpoint['epoch']))
+		else:
+			print("=> no checkpoint found at '{}'".format(args.resume))
+
 
 	if args.distributed:
 		train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -160,7 +162,7 @@ def main():
 	val_loader = torch.utils.data.DataLoader(
 		FashionDataset(
 			args.data,
-			'val', transforms.Compose([
+			['val'], transforms.Compose([
 			transforms.ToPILImage(),
 			transforms.Resize(256),
 			transforms.CenterCrop(224),
@@ -221,7 +223,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
 		loss = criterion(output, target_var)
 
 		# measure accuracy and record loss
-		prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
+		prec1, prec5, correct, count  = accuracy(output.data, target, topk=(1, 5), num_cls=len(train_loader.dataset.class_to_idx))
 		losses.update(loss.data[0], input.size(0))
 		top1.update(prec1[0], input.size(0))
 		top5.update(prec5[0], input.size(0))
@@ -254,8 +256,10 @@ def validate(val_loader, model, criterion):
 
 	# switch to evaluate mode
 	model.eval()
-
 	end = time.time()
+
+	correct = list()
+	count = list()
 	for i, (input, target) in enumerate(val_loader):
 		target = target.cuda(async=True)
 		input_var = torch.autograd.Variable(input, volatile=True)
@@ -266,7 +270,11 @@ def validate(val_loader, model, criterion):
 		loss = criterion(output, target_var)
 
 		# measure accuracy and record loss
-		prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
+		prec1, prec5, correct_batch, count_batch  = accuracy(output.data, target, topk=(1, 5), num_cls=len(val_loader.dataset.class_to_idx))
+
+		correct.append(correct_batch)
+		count.append(count_batch)
+
 		losses.update(loss.data[0], input.size(0))
 		top1.update(prec1[0], input.size(0))
 		top5.update(prec5[0], input.size(0))
@@ -286,6 +294,11 @@ def validate(val_loader, model, criterion):
 
 	print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f}'
 		  .format(top1=top1, top5=top5))
+
+	correct = np.array(correct).sum(0)
+	count = np.array(count).sum(0)
+	print correct/count
+	print count.astype(np.int32)
 
 	return top1.avg
 
@@ -321,7 +334,7 @@ def adjust_learning_rate(optimizer, epoch):
 		param_group['lr'] = lr
 
 
-def accuracy(output, target, topk=(1,)):
+def accuracy(output, target, topk=(1,), num_cls=46):
 	"""Computes the precision@k for the specified values of k"""
 	maxk = max(topk)
 	batch_size = target.size(0)
@@ -332,8 +345,19 @@ def accuracy(output, target, topk=(1,)):
 
 	res = []
 	for k in topk:
-		correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-		res.append(correct_k.mul_(100.0 / batch_size))
+		correct_k = correct[:k]
+		res.append(correct_k.view(-1).float().sum(0, keepdim=True).mul_(100.0 / batch_size))
+	
+	cls_correct = np.zeros(num_cls)
+	cls_count = np.zeros(num_cls)
+	for idx, tar in enumerate(target):
+		if correct[:5,idx].sum():
+			cls_correct[target[idx]] += 1
+		cls_count[target[idx]] += 1
+
+	res.append(cls_correct)
+	res.append(cls_count)
+
 	return res
 
 

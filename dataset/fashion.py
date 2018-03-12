@@ -23,7 +23,6 @@ class FashionDataset(Dataset):
 		self.root_dir = root_dir
 		self.transform = transform
 		self.class_to_idx = dict()
-		self.classes = list()
 		self.dataset = self._load_dataset(mode)
 
 
@@ -31,19 +30,47 @@ class FashionDataset(Dataset):
 		return len(self.dataset)
 
 
-	def _load_dataset(self, mode, cls_file='dataset/category.txt', bbox_file='dataset/bbox.txt', mode_file='dataset/partition.txt'):
+	def _load_dataset(self, mode, cls_file='dataset/category.txt', bbox_file='dataset/bbox.txt', mode_file='dataset/partition.txt', min_sample=500):
 		dataset = list()
+		cls_len = dict()
 		cls_file = open(cls_file, 'r')
 		bbox_file = open(bbox_file, 'r')
 		mode_file = open(mode_file, 'r')
+		if 'train' not in mode:
+			with open('dataset/clasess.txt','r') as f:
+				for line in f:
+					line = line.strip().split(',')
+					self.class_to_idx[line[0]] = int(line[1])
+
 		for line in cls_file:
-			img, cls_idx = line.strip().split()
+			img, cls = line.strip().split()
 			bbox = [int(pos) for pos in bbox_file.readline().strip().split()[1:]]
-			if mode_file.readline().strip().split()[1] == mode:
-				if cls_idx not in self.class_to_idx:
-					self.class_to_idx[cls_idx] = len(self.class_to_idx)
-					self.classes.append(cls_idx)
-				dataset.append((img, self.class_to_idx[cls_idx], bbox))
+			if mode_file.readline().strip().split()[1] in mode:
+#				if cls_idx not in self.class_to_idx:
+#					self.class_to_idx[cls_idx] = len(self.class_to_idx)
+#					self.idx_to_class[len(self.class_to_idx)] = cls_idx
+#					self.idx_len[len(selef.class_to_idx)] = 0
+#					self.classes.append(cls_idx)
+				if 'train' in mode:
+					dataset.append((img, cls, bbox))
+					if cls not in cls_len:
+						cls_len[cls] =0 
+					cls_len[cls] += 1
+				else:
+					if cls in self.class_to_idx:
+						dataset.append((img, self.class_to_idx[cls], bbox))
+
+		if 'train' in mode:
+			for cls in cls_len:
+				if cls_len[cls] > min_sample:
+					self.class_to_idx[cls] = len(self.class_to_idx)
+
+			dataset = [[item[0], self.class_to_idx[item[1]], item[2]] for item in dataset if (item[1] in self.class_to_idx.keys())]
+
+			with open('dataset/clasess.txt','w') as f:
+				for cls in self.class_to_idx:
+					f.write('{0},{1}\n'.format(cls, self.class_to_idx[cls]))
+
 
 		random.shuffle(dataset)
 		return dataset
