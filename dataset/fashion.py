@@ -7,6 +7,7 @@ from torchvision import transforms, utils
 from skimage import io, transform
 import random
 import os
+import pickle
 
 
 
@@ -24,6 +25,7 @@ class FashionDataset(Dataset):
 		self.root_dir = root_dir
 		self.transform = transform
 		self.class_to_idx = dict()
+		self.idx_to_class = dict()
 		self.dataset = self._load_dataset(mode)
 
 
@@ -77,20 +79,20 @@ class FashionDataset(Dataset):
 # 		return dataset
 
 
-	def _load_dataset(self, mode, cls_file='dataset/category.txt', bbox_file='dataset/bbox.txt', min_sample=500):
-		dataset_file = 'dataset-{0}.pkl'.format(min_sample)
+	def _load_dataset(self, mode, cls_file='dataset/category.txt', bbox_file='dataset/bbox.txt', min_sample=1000):
+		dataset_file = 'dataset/{0}.pkl'.format(min_sample)
 		if os.path.isfile(dataset_file):
 			with open(dataset_file, 'r') as f:
-				dataset = pickle.load(f)
+				dataset, self.class_to_idx = pickle.load(f)
+				self.idx_to_class = {self.class_to_idx[cls]:cls for cls in self.class_to_idx}
 			return dataset[mode]
 
 		tmp = list()
-		dataset dict()
+		dataset = dict()
 		cls_len = dict()
 
 		cls_file = open(cls_file, 'r')
 		bbox_file = open(bbox_file, 'r')
-		mode_file = open(mode_file, 'r')
 
 
 		for line in cls_file:
@@ -105,20 +107,25 @@ class FashionDataset(Dataset):
 
 		for cls in cls_len:
 			if cls_len[cls] > min_sample:
-				self.class_to_idx[cls] = len(self.class_to_idx)
+				if int(cls) not in [42,24,44,48,29,39,10,19,30,35]:
+					self.class_to_idx[cls] = len(self.class_to_idx)
+					self.idx_to_class[len(self.class_to_idx)-1] = cls
 
-		dataset['train'] = tmp[:len(tmp) * 0.85]
-		dataset['test'] = tmp[len(tmp) * 0.85: ]
+
+		border_line = int(len(tmp) * 0.85)
+		dataset['train'] = tmp[:border_line]
+		dataset['test'] = tmp[border_line: ]
+
 
 		for key in dataset:
 			d = list()
 			for item in dataset[key]:
-				if (item[1] in self.class_to_idx.keys())
+				if (item[1] in self.class_to_idx.keys()): #and (item[1] not in [0,3,10, 4, 12]):
 					d.append([item[0], self.class_to_idx[item[1]], item[2]])
 			dataset[key] = d
 
 		with open(dataset_file, 'w') as f:
-			pickle.dump(dataset, f)
+			pickle.dump([dataset, self.class_to_idx], f)
 
 		return dataset[mode]
 

@@ -97,11 +97,11 @@ def main():
 	# define loss function (criterion) and optimizer
 	criterion = nn.CrossEntropyLoss().cuda()
 
-	optimizer = torch.optim.SGD(model.parameters(), args.lr,
-								momentum=args.momentum,
-								weight_decay=args.weight_decay)
-#	optimizer = torch.optim.Adam(model.parameters(), args.lr,
-#								betas=(0.9, 0.999), eps=1e-08, weight_decay=args.weight_decay) 
+#	optimizer = torch.optim.SGD(model.parameters(), args.lr,
+#								momentum=args.momentum,
+#								weight_decay=args.weight_decay)
+	optimizer = torch.optim.Adam(model.parameters(), args.lr,
+								betas=(0.9, 0.999), eps=1e-08, weight_decay=args.weight_decay) 
 
 	# optionally resume from a checkpoint
 	cudnn.benchmark = True
@@ -124,7 +124,7 @@ def main():
 	else:
 		train_dataset = FashionDataset(
 			args.data,
-			['train', 'val'],
+			'train',
 			transforms.Compose([
 				transforms.ToPILImage(),
 				transforms.Resize((256,256)),
@@ -162,7 +162,7 @@ def main():
 	val_loader = torch.utils.data.DataLoader(
 		FashionDataset(
 			args.data,
-			['val'], transforms.Compose([
+			'test', transforms.Compose([
 			transforms.ToPILImage(),
 			transforms.Resize(256),
 			transforms.CenterCrop(224),
@@ -296,9 +296,11 @@ def validate(val_loader, model, criterion):
 		  .format(top1=top1, top5=top5))
 
 	correct = np.array(correct).sum(0)
-	count = np.array(count).sum(0)
-	print correct/count
-	print count.astype(np.int32)
+	count = np.array(count).sum(0).astype(np.int32)
+	pres = correct/count
+
+	for idx , item in enumerate(pres):
+		print idx, count[idx], train_dataset.idx_to_class[idx], item
 
 	return top1.avg
 
@@ -351,7 +353,7 @@ def accuracy(output, target, topk=(1,), num_cls=46):
 	cls_correct = np.zeros(num_cls)
 	cls_count = np.zeros(num_cls)
 	for idx, tar in enumerate(target):
-		if correct[:5,idx].sum():
+		if correct[0,idx]:
 			cls_correct[target[idx]] += 1
 		cls_count[target[idx]] += 1
 
