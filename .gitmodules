@@ -1,0 +1,3 @@
+[submodule "dataset/socialRelation-vision"]
+	path = dataset/socialRelation-vision
+	url = git@github.com:YoKathy/socialRelation-vision.git
