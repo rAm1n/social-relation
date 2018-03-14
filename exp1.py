@@ -1,8 +1,12 @@
+from __future__ import print_function
 import argparse
 import os
 import shutil
 import time
 import numpy as np
+import sys
+from datetime import datetime
+import logging
 
 import torch
 import torch.nn as nn
@@ -17,23 +21,25 @@ from dataset.loader import Dataset
 from models import *
 from utils import config
 
-
 parser = argparse.ArgumentParser(description='Social recognition')
 
 parser.add_argument('--fashion', default='weights/resnet34-fashion-12cls-adam-3e-4.pth.tar', metavar='DIR',
 					help='path to dataset')
 parser.add_argument('--event', default='weights/resnet50_event_acc74.pth.tar', metavar='DIR',
 					help='path to dataset')
-
+parser.add_argument('--weights', default='weights', metavar='DIR',
+                    help='path to dataset')
+parser.add_argument('--log', default='logs/', metavar='DIR',
+                    help='path to dataset')
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
 					help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs', default=10, type=int, metavar='N',
 					help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
 					help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=4, type=int,
+parser.add_argument('-b', '--batch-size', default=32, type=int,
 					metavar='N', help='mini-batch size (default: 256)')
-parser.add_argument('--lr', '--learning-rate', default=1e-1, type=float,
+parser.add_argument('--lr', '--learning-rate', default=3e-4, type=float,
 					metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
 					help='momentum')
@@ -47,10 +53,9 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
 					help='evaluate model on validation set')
 parser.add_argument('--world-size', default=1, type=int,
 					help='number of distributed processes')
-
-
-
 best_prec1 = 0
+
+
 
 
 def main():
@@ -63,10 +68,17 @@ def main():
 		dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
 								world_size=args.world_size)
 
+	logging.basicConfig(
+		format="%(message)s",
+		handlers=[
+			logging.FileHandler("{0}/{1}.log".format(args.log, sys.argv[0].replace('.py','') + datetime.now().strftime('_%H_%M_%d_%m_%Y'))),
+			logging.StreamHandler()
+		],
+		level=logging.INFO)
 
-	print('creating model and allocating memory')
+	logging.info('creating model and allocating memory')
 	model = SocialNet(fashion=args.fashion, event=args.event, num_class=config['num_class']).cuda()
-	print('initilzing model with pretrained weights')
+	logging.info('initilzing model with pretrained weights')
 	model._initialize_weights(args.event, args.fashion)
 
 
@@ -76,7 +88,8 @@ def main():
 #	optimizer = torch.optim.SGD(model.parameters(), args.lr,
 #								momentum=args.momentum,
 #								weight_decay=args.weight_decay)
-	optimizer = torch.optim.Adam(model.fc.parameters(), args.lr,
+	param = list(model.event.parameters()) + list(model.fc.parameters())
+	optimizer = torch.optim.Adam(param, args.lr,
 								betas=(0.9, 0.999), eps=1e-08, weight_decay=args.weight_decay)
 
 	# optionally resume from a checkpoint
@@ -84,23 +97,23 @@ def main():
 
 	# Data loading code
 	
-	print('creating data loaders')
+	logging.info('creating data loaders')
 	train_dataset = Dataset(config, mode='train')
 	test_dataset = Dataset(config, mode='eval')
 
 
 	if args.resume:
 		if os.path.isfile(args.resume):
-			print("=> loading checkpoint '{}'".format(args.resume))
+			logging.info("=> loading checkpoint '{}'".format(args.resume))
 			checkpoint = torch.load(args.resume)
 			args.start_epoch = checkpoint['epoch']
 			best_prec1 = checkpoint['best_prec1']
 			model.load_state_dict(checkpoint['state_dict'])
 			optimizer.load_state_dict(checkpoint['optimizer'])
-			print("=> loaded checkpoint '{}' (epoch {})"
+			logging.info("=> loaded checkpoint '{}' (epoch {})"
 				  .format(args.resume, checkpoint['epoch']))
 		else:
-			print("=> no checkpoint found at '{}'".format(args.resume))
+			logging.info("=> no checkpoint found at '{}'".format(args.resume))
 
 
 	train_loader = torch.utils.data.DataLoader(
@@ -116,7 +129,7 @@ def main():
 		validate(val_loader, model, criterion)
 		return
 
-	print('start training')
+	logging.info('start training')
 
 	for epoch in range(args.start_epoch, args.epochs):
 
@@ -186,7 +199,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
 		end = time.time()
 
 		if i % args.print_freq == 0:
-			print('Epoch: [{0}][{1}/{2}]\t'
+			logging.info('Epoch: [{0}][{1}/{2}]\t'
 				  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
 				  'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
 				  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
@@ -239,7 +252,7 @@ def validate(val_loader, model, criterion):
 		end = time.time()
 
 		if i % args.print_freq == 0:
-			print('Test: [{0}/{1}]\t'
+			logging.info('Test: [{0}/{1}]\t'
 				  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
 				  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
 				  'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
@@ -247,7 +260,7 @@ def validate(val_loader, model, criterion):
 				   i, len(val_loader), batch_time=batch_time, loss=losses,
 				   top1=top1, top5=top5))
 
-	print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f}'
+	logging.info(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f}'
 		  .format(top1=top1, top5=top5))
 
 	correct = np.array(correct).sum(0)
@@ -255,15 +268,19 @@ def validate(val_loader, model, criterion):
 	pres = correct/count
 
 	for idx , item in enumerate(pres):
-		print idx, count[idx], item
+		msg = str(idx) + ' ' + str(count[idx]) + ' ' + str(item)
+		logging.info(msg)
 
 	return top1.avg
 
 
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+def save_checkpoint(state, is_best, filename='{0}-{1}.pth.tar'.format(sys.argv[0][:-3], config['num_class'])):
+	filename = os.path.join(args.weights, filename)
 	torch.save(state, filename)
 	if is_best:
-		shutil.copyfile(filename, 'model_best.pth.tar')
+		logging.warning('***********************saving best model *********************')
+		best = os.path.join(args.weights, '{0}-{1}-best.pth.tar'.format(sys.argv[0][:-3], config['num_class']))
+		shutil.copyfile(filename, best)
 
 
 class AverageMeter(object):

@@ -11,7 +11,7 @@ from skimage import io, transform
 import random
 import os
 import pickle
-from itertools import izip
+#from itertools import izip
 
 
 
@@ -71,7 +71,7 @@ class Dataset(Dataset):
 		pairs = list()
 
 		with open(pair_1) as pair_1, open(pair_2) as pair_2:
-			for x, y in izip(pair_1, pair_2):
+			for x, y in zip(pair_1, pair_2):
 				img_1, cls_1 = x.strip().split()
 				img_2, cls_2 = y.strip().split()
 				if cls_1 != cls_2:

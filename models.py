@@ -6,7 +6,7 @@ import torchvision.transforms as transforms
 import torchvision.models as models
 from torchvision.models.resnet import ResNet, BasicBlock, Bottleneck
 from torch.autograd import Variable
-
+from utils import check_weights
 
 
 class SocialNet(nn.Module):
@@ -94,7 +94,9 @@ class C_ResNet(ResNet):
 		return x
 
 	def load_weights(self, pretrained):
-		self.load_state_dict(torch.load(pretrained)['state_dict'])
+		w = torch.load(pretrained)['state_dict']
+		w = check_weights(w)
+		self.load_state_dict(w)
 
 
 
@@ -105,7 +107,9 @@ def resnet18(pretrained='', **kwargs):
 	"""
 	model = C_ResNet(BasicBlock, [2, 2, 2, 2], **kwargs)
 	if pretrained:  # weights.
-		model.load_state_dict(torch.load(pretrained)['state_dict'])
+		w = torch.load(pretrained)['state_dict']
+		w = check_weights(w)
+		model.load_state_dict(w)
 	return model
 
 
@@ -118,7 +122,9 @@ def resnet34(pretrained='', **kwargs):
 	"""
 	model = C_ResNet(BasicBlock, [3, 4, 6, 3], **kwargs)
 	if pretrained:  # weights.
-		model.load_state_dict(torch.load(pretrained)['state_dict'])
+		w = torch.load(pretrained)['state_dict']
+		w = check_weights(w)
+		model.load_state_dict(w)
 	return model
 
 
@@ -131,6 +137,8 @@ def resnet50(pretrained='', **kwargs):
 	"""
 	model = C_ResNet(Bottleneck, [3, 4, 6, 3], **kwargs)
 	if pretrained:  # weights.
+		w = torch.load(pretrained)['state_dict']
+		w = check_weights(w)
 		model.load_state_dict(torch.load(pretrained)['state_dict'])
 	return model
 
