@@ -66,6 +66,9 @@ def main():
 
 	print('creating model and allocating memory')
 	model = SocialNet(fashion=args.fashion, event=args.event, num_class=config['num_class']).cuda()
+	print('initilzing model with pretrained weights')
+	model._initialize_weights(args.event, args.fashion)
+
 
 	# define loss function (criterion) and optimizer
 	criterion = nn.CrossEntropyLoss().cuda()
@@ -83,7 +86,7 @@ def main():
 	
 	print('creating data loaders')
 	train_dataset = Dataset(config, mode='train')
-	test_dataset = Dataset(config, mode='test')
+	test_dataset = Dataset(config, mode='eval')
 
 
 	if args.resume:
