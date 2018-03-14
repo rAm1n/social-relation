@@ -14,14 +14,7 @@ import pickle
 from itertools import izip
 
 
-config = {
 
-	'img_dir' : '/media/ramin/monster/dataset/social/PIPA-relation/imgs/',
-	'body_dir' : '/media/ramin/monster/dataset/social/PIPA-relation/all_single_body/',
-	'pair_dir' : 'dataset/socialRelation-vision/annotator_consistency3(used in our paper)/',
-	'pair_pattern' : 'single_body{0}_{1}_{2}.txt', # pair_num (1,2) -  set (train , test) - 5,16
-	'num_classes' : '16',
-}
 
 
 normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -68,8 +61,8 @@ class Dataset(Dataset):
 
 		DIR = self.config['pair_dir']
 
-		pair_1 = self.config['pair_pattern'].format(1, mode, self.config['num_classes'])
-		pair_2 = self.config['pair_pattern'].format(2, mode, self.config['num_classes'])
+		pair_1 = self.config['pair_pattern'].format(1, mode, self.config['num_class'])
+		pair_2 = self.config['pair_pattern'].format(2, mode, self.config['num_class'])
 
 		pair_1 = os.path.join(DIR, pair_1)
 		pair_2 = os.path.join(DIR, pair_2)
