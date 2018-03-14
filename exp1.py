@@ -25,11 +25,13 @@ parser.add_argument('--fashion', default='weights/resnet34-fashion-12cls-adam-3e
 parser.add_argument('--event', default='weights/resnet50_event_acc74.pth.tar', metavar='DIR',
 					help='path to dataset')
 
-parser.add_argument('--epochs', default=90, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
+					help='number of data loading workers (default: 4)')
+parser.add_argument('--epochs', default=10, type=int, metavar='N',
 					help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
 					help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=256, type=int,
+parser.add_argument('-b', '--batch-size', default=4, type=int,
 					metavar='N', help='mini-batch size (default: 256)')
 parser.add_argument('--lr', '--learning-rate', default=1e-1, type=float,
 					metavar='LR', help='initial learning rate')
@@ -52,7 +54,7 @@ best_prec1 = 0
 
 
 def main():
-	# global args, best_prec1, model, train_dataset, val_loader
+	global args, best_prec1, model, train_dataset, test_loader
 	args = parser.parse_args()
 
 	args.distributed = args.world_size > 1
@@ -62,6 +64,7 @@ def main():
 								world_size=args.world_size)
 
 
+	print('creating model and allocating memory')
 	model = SocialNet(fashion=args.fashion, event=args.event, num_class=config['num_class']).cuda()
 
 	# define loss function (criterion) and optimizer
@@ -77,7 +80,8 @@ def main():
 	cudnn.benchmark = True
 
 	# Data loading code
-
+	
+	print('creating data loaders')
 	train_dataset = Dataset(config, mode='train')
 	test_dataset = Dataset(config, mode='test')
 
@@ -109,6 +113,8 @@ def main():
 		validate(val_loader, model, criterion)
 		return
 
+	print('start training')
+
 	for epoch in range(args.start_epoch, args.epochs):
 
 		adjust_learning_rate(optimizer, epoch)
@@ -124,7 +130,6 @@ def main():
 		best_prec1 = max(prec1, best_prec1)
 		save_checkpoint({
 			'epoch': epoch + 1,
-			'arch': args.arch,
 			'state_dict': model.state_dict(),
 			'best_prec1': best_prec1,
 			'optimizer' : optimizer.state_dict(),
@@ -142,18 +147,20 @@ def train(train_loader, model, criterion, optimizer, epoch):
 	model.train()
 
 	end = time.time()
+	global img_var, img_1_var, img_2_var, target_var
+
 	for i, (img, img_1, img_2, target) in enumerate(train_loader):
 		# measure data loading time
 		data_time.update(time.time() - end)
 
 		target = target.cuda(async=True)
-		img_var = torch.autograd.Variable(img)
-		img_1_var = torch.autograd.Variable(img_1)
-		img_2_var = torch.autograd.Variable(img_2)
+		img_var = torch.autograd.Variable(img).cuda()
+		img_1_var = torch.autograd.Variable(img_1).cuda()
+		img_2_var = torch.autograd.Variable(img_2).cuda()
 		target_var = torch.autograd.Variable(target)
 
 		# compute output
-		output = model(img_var, img_1_var, img_2_var, target_var)
+		output = model(img_var, img_1_var, img_2_var)
 
 		loss = criterion(output, target_var)
 
@@ -162,9 +169,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
 			topk=(1, 5), num_cls=train_loader.dataset.config['num_class'])
 
 
-		losses.update(loss.data[0], input.size(0))
-		top1.update(prec1[0], input.size(0))
-		top5.update(prec5[0], input.size(0))
+		losses.update(loss.data[0], img.size(0))
+		top1.update(prec1[0], img.size(0))
+		top5.update(prec5[0], img.size(0))
 
 		# compute gradient and do SGD step
 		optimizer.zero_grad()
@@ -199,31 +206,30 @@ def validate(val_loader, model, criterion):
 	correct = list()
 	count = list()
 
-	for i, (img, img_1, img_2, target) in enumerate(train_loader):
+	for i, (img, img_1, img_2, target) in enumerate(val_loader):
 		# measure data loading time
-		data_time.update(time.time() - end)
 
 		target = target.cuda(async=True)
-		img_var = torch.autograd.Variable(img, volatile=True)
-		img_1_var = torch.autograd.Variable(img_1, volatile=True)
-		img_2_var = torch.autograd.Variable(img_2, volatile=True)
+		img_var = torch.autograd.Variable(img, volatile=True).cuda()
+		img_1_var = torch.autograd.Variable(img_1, volatile=True).cuda()
+		img_2_var = torch.autograd.Variable(img_2, volatile=True).cuda()
 		target_var = torch.autograd.Variable(target, volatile=True)
 
 		# compute output
-		output = model(img_var, img_1_var, img_2_var, target_var)
+		output = model(img_var, img_1_var, img_2_var)
 		loss = criterion(output, target_var)
 
 		# measure accuracy and record loss
-		prec1, prec5, correct, count  = accuracy(output.data, target, \
-			topk=(1, 5), num_cls=train_loader.dataset.config['num_class'])
+		prec1, prec5, correct_batch, count_batch  = accuracy(output.data, target, \
+			topk=(1, 5), num_cls=val_loader.dataset.config['num_class'])
 
 
 		correct.append(correct_batch)
 		count.append(count_batch)
 
-		losses.update(loss.data[0], input.size(0))
-		top1.update(prec1[0], input.size(0))
-		top5.update(prec5[0], input.size(0))
+		losses.update(loss.data[0], img.size(0))
+		top1.update(prec1[0], img.size(0))
+		top5.update(prec5[0], img.size(0))
 
 		# measure elapsed time
 		batch_time.update(time.time() - end)

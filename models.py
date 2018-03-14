@@ -5,19 +5,19 @@ import torch.nn as nn
 import torchvision.transforms as transforms
 import torchvision.models as models
 from torchvision.models.resnet import ResNet, BasicBlock, Bottleneck
+from torch.autograd import Variable
 
 
 
-
-class SocialNet(nn.Module)
+class SocialNet(nn.Module):
 	def __init__(self, event=None, fashion=None, num_class=16):
-		super(SocialNet, self).init()
+		super(SocialNet, self).__init__()
 
 		self.fashion = resnet34()
 		self.event = resnet50()
 
 		self.fc = nn.Sequential(
-			nn.Linear(2048 + 512, 96),
+			nn.Linear(2048 + 512 + 512, 96),
 			nn.Linear(96, num_class),
 		)
 		# self._initialize_weights(event, fashion)
@@ -28,7 +28,7 @@ class SocialNet(nn.Module)
 		full = self.event(full).data
 
 		features = torch.cat([b1, b2, full], 1)
-		features = features.view(features.size(0), -1)
+		features = Variable(features.view(features.size(0), -1)).cuda()
 
 		return self.fc(features)
 
