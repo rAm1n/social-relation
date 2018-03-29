@@ -17,7 +17,7 @@ class SocialNet(nn.Module):
 		self.event = resnet50()
 
 		self.fc = nn.Sequential(
-			nn.Linear(2048 + 512 + 512, 96),
+			nn.Linear(2048 ,96),#+ 512 + 512, 96),
 			nn.Linear(96, num_class),
 		)
 		# self._initialize_weights(event, fashion)
@@ -25,10 +25,14 @@ class SocialNet(nn.Module):
 	def forward(self, full, b1, b2):
 		b1 = self.fashion(b1).data
 		b2 = self.fashion(b2).data
-		full = self.event(full).data
+		full = self.event(full)
 
-		features = torch.cat([b1, b2, full], 1)
-		features = Variable(features.view(features.size(0), -1)).cuda()
+		b_features = torch.cat([b1, b2], 1)
+		b_features = Variable(b_features).cuda()
+
+		#features = torch.cat([b_features, full],1)
+		features = full
+		features = features.view(features.size(0), -1)
 
 		return self.fc(features)
 

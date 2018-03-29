@@ -1,0 +1,4 @@
+creating model and allocating memory
+initilzing model with pretrained weights
+creating data loaders
+start training
